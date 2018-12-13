@@ -61,6 +61,7 @@ app.post('/checkBeacon', urlencodedParser, function(req, res) {
                             if(insertErr){
                                 throw insertErr;
                             }
+                            result["insertId"] = results.insertId
                             res.send(result);
                         })
                     }          
@@ -106,7 +107,7 @@ function insertBeacon(uuid, callback) {
         if(err) {
             throw err; 
         }
-        callback();
+        callback(err, rows);
     })  
 }
 
@@ -117,7 +118,7 @@ function updateBeacon(uuid, callback) {
     if(err) {
         throw err; 
     }
-    callback();
+    callback(err, rows);
     })  
 }
 
