@@ -8,10 +8,10 @@ var urlencodedParser = bodyParser.urlencoded({ extended: false });
 var app = express()
 
 var pool = mysql.createPool({
-    host: "10.153.196.100",
-    user: "loxa0802",
-    password: "f74986337",
-    database: "loxa0802",
+    host: "xxxxxx",
+    user: "xxxxxx",
+    password: "xxxxxx",
+    database: "xxxxxx",
     waitForConnections: true,
     connectionLimit: 10
 });
