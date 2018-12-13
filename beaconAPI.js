@@ -8,22 +8,24 @@ var urlencodedParser = bodyParser.urlencoded({ extended: false });
 var app = express()
 
 var pool = mysql.createPool({
-    host: "xxxxxx",
-    user: "xxxxxx",
-    password: "xxxxxx",
-    database: "xxxxxx",
+    host: "x",
+    user: "x",
+    password: "x",
+    database: "x",
     waitForConnections: true,
     connectionLimit: 10
 });
 
 var result = {
-    "message": ""
+    "message": "",
+    "insertId": ""
 };
 
 /*
     提供前端查詢Beacon清單使用
 */
 app.get('/getBeaconList', function(req, res) {
+    clearResult();
     queryBeaconList(function(queryErr, results) {
         if(queryErr){
             throw queryErr;
@@ -48,6 +50,7 @@ function queryBeaconList(callback) {
     提供前端傳入UUID及密碼後，關閉Beacon使用
  */
 app.post('/closeBeacon', urlencodedParser, function(req, res) {
+    clearResult();
     var uuid = req.body.uuid;
     var password = req.body.password;
 
@@ -55,13 +58,13 @@ app.post('/closeBeacon', urlencodedParser, function(req, res) {
         if(queryErr){
             throw queryErr;
         }
-        console.log(results.length)
         if(results.length > 0) {
             updateBeacon(uuid, "N", function(updateErr, results) {
                 if(updateErr){
                     throw updateErr;
                 }
                 result["message"] = ""
+                result["insertId"] = ""
                 res.send(result);
             })
         }else {
@@ -92,7 +95,8 @@ function checkBeaconPW(password, callback) {
 */
 app.post('/checkBeacon', urlencodedParser, function(req, res) {
     var uuid = req.body.uuid;
-    
+    clearResult();
+
     if(uuid){
         
         //先檢查是否有正開啟的beacon: STATUS = Y
@@ -118,7 +122,7 @@ app.post('/checkBeacon', urlencodedParser, function(req, res) {
                             if(updateErr){
                                 throw updateErr;
                             }
-                            result["message"] = ""
+                        
                             res.send(result);
                         })
                     }else {
@@ -127,7 +131,7 @@ app.post('/checkBeacon', urlencodedParser, function(req, res) {
                             if(insertErr){
                                 throw insertErr;
                             }
-                            result["message"] = ""
+    
                             result["insertId"] = results.insertId
                             res.send(result);
                         })
@@ -187,6 +191,12 @@ function updateBeacon(uuid, status, callback) {
     }
     callback(err, rows);
     })  
+}
+
+//清除結果資料
+function clearResult(){
+    result["message"] = ""
+    result["insertId"] = ""
 }
 
 // 監聽
