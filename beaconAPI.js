@@ -45,17 +45,43 @@ function queryBeaconList(callback) {
 }
 
 /*
-    提供前端傳入UUID後，關閉Beacon使用
+    提供前端傳入UUID及密碼後，關閉Beacon使用
  */
 app.post('/closeBeacon', urlencodedParser, function(req, res) {
     var uuid = req.body.uuid;
-    updateBeacon(uuid, "N", function(updateErr, results) {
-        if(updateErr){
-            throw updateErr;
+    var password = req.body.password;
+
+    checkBeaconPW(password, function(queryErr, results) {
+        if(queryErr){
+            throw queryErr;
         }
-        res.send(result);
+        console.log(results.length)
+        if(results.length > 0) {
+            updateBeacon(uuid, "N", function(updateErr, results) {
+                if(updateErr){
+                    throw updateErr;
+                }
+                result["message"] = ""
+                res.send(result);
+            })
+        }else {
+            result["message"] = "非權限者，不可關閉Beacon"
+            res.send(result)
+        }
     })
 })
+
+//要關閉Beacon時，需要輸入密碼: 查詢Beacon密碼
+function checkBeaconPW(password, callback) {
+    var sql = "SELECT * FROM BEACON_PASSWORD WHERE PASSWORD = '" + password + "'"; 
+    pool.query(sql, function(err, rows, fileds){
+        if(err){
+            throw err; 
+        } 
+ 
+        callback(err, rows)
+    })  
+}
 
 /*
     前端傳入UUID，先檢查是否有其他ID狀態=Y
@@ -92,6 +118,7 @@ app.post('/checkBeacon', urlencodedParser, function(req, res) {
                             if(updateErr){
                                 throw updateErr;
                             }
+                            result["message"] = ""
                             res.send(result);
                         })
                     }else {
@@ -100,6 +127,7 @@ app.post('/checkBeacon', urlencodedParser, function(req, res) {
                             if(insertErr){
                                 throw insertErr;
                             }
+                            result["message"] = ""
                             result["insertId"] = results.insertId
                             res.send(result);
                         })
