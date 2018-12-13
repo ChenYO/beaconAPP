@@ -16,6 +16,47 @@ var pool = mysql.createPool({
     connectionLimit: 10
 });
 
+var result = {
+    "message": ""
+};
+
+/*
+    提供前端查詢Beacon清單使用
+*/
+app.get('/getBeaconList', function(req, res) {
+    queryBeaconList(function(queryErr, results) {
+        if(queryErr){
+            throw queryErr;
+        }
+        res.send(results);
+    })
+})
+
+//查詢BeaconList Table取得所有的資料
+function queryBeaconList(callback) {
+    var sql = "SELECT * FROM BEACON_LIST "; 
+
+    pool.query(sql, function(err, rows, fileds){
+        if(err){
+            throw err; 
+        } 
+        callback(err, rows)
+    })  
+}
+
+/*
+    提供前端傳入UUID後，關閉Beacon使用
+ */
+app.post('/closeBeacon', urlencodedParser, function(req, res) {
+    var uuid = req.body.uuid;
+    updateBeacon(uuid, "N", function(updateErr, results) {
+        if(updateErr){
+            throw updateErr;
+        }
+        res.send(result);
+    })
+})
+
 /*
     前端傳入UUID，先檢查是否有其他ID狀態=Y
     無: 檢查ID是否存於BEACON_LIST中
@@ -25,9 +66,7 @@ var pool = mysql.createPool({
 */
 app.post('/checkBeacon', urlencodedParser, function(req, res) {
     var uuid = req.body.uuid;
-    var result = {
-        "message": ""
-    };
+    
     if(uuid){
         
         //先檢查是否有正開啟的beacon: STATUS = Y
@@ -49,7 +88,7 @@ app.post('/checkBeacon', urlencodedParser, function(req, res) {
                                     
                     if(rows.length > 0){
                         //若已存在則開啟Beacon
-                        updateBeacon(uuid, function(updateErr, results) {
+                        updateBeacon(uuid, "Y", function(updateErr, results) {
                             if(updateErr){
                                 throw updateErr;
                             }
@@ -101,8 +140,8 @@ function getBeaconData(uuid, callback) {
 
 //新增Beacon資料
 function insertBeacon(uuid, callback) {
-    var sql = "INSERT INTO BEACON_LIST (UUID, BEACON_CODE, STATUS) VALUES" +
-          "('" + uuid + "', '1', 'Y')";
+    var sql = "INSERT INTO BEACON_LIST (UUID, STATUS) VALUES" +
+          "('" + uuid + "', 'Y')";
     pool.query(sql, function(err, rows, fileds){
         if(err) {
             throw err; 
@@ -112,8 +151,8 @@ function insertBeacon(uuid, callback) {
 }
 
 //開啟Beacon: STATUS = Y
-function updateBeacon(uuid, callback) {
-    var sql = "UPDATE BEACON_LIST SET STATUS='Y' WHERE UUID='" + uuid + "'";
+function updateBeacon(uuid, status, callback) {
+    var sql = "UPDATE BEACON_LIST SET STATUS='" + status + "' WHERE UUID='" + uuid + "'";
     pool.query(sql, function(err, rows, fileds){
     if(err) {
         throw err; 
@@ -124,5 +163,5 @@ function updateBeacon(uuid, callback) {
 
 // 監聽
 app.listen(10080, function () {
-  console.log('success listen...10082');
+  console.log('success listen...10080');
 });
