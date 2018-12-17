@@ -1,11 +1,9 @@
 var mysql = require("mysql");
-var async = require("async");
 var express = require('express');
 var bodyParser = require('body-parser');
-var async = require("async");
 var urlencodedParser = bodyParser.urlencoded({ extended: false });
 
-var app = express()
+var app = express();
 
 var pool = mysql.createPool({
     host: "x",
@@ -34,111 +32,132 @@ app.get('/getBeaconList', function(req, res) {
     })
 })
 
-//查詢BeaconList Table取得所有的資料
-function queryBeaconList(callback) {
-    var sql = "SELECT * FROM BEACON_LIST "; 
-
-    pool.query(sql, function(err, rows, fileds){
-        if(err){
-            throw err; 
-        } 
-        callback(err, rows)
-    })  
-}
-
 /*
-    提供前端傳入UUID及密碼後，關閉Beacon使用
+    提供前端不斷傳入Beacon訊號
+    所需參數: 
+        deviceId
+        password
+        status: 
+            A: 依照deviceId新增第一筆Start_Time，若已有記錄則更新Update_Time
+            C: 需輸入密碼後，關閉Beacon使用，更新Finish_Time
+    
  */
-app.post('/closeBeacon', urlencodedParser, function(req, res) {
+app.post('/receiveBeacon', urlencodedParser, function(req, res) {
     clearResult();
-    var uuid = req.body.uuid;
+    var deviceId = req.body.deviceId;
     var password = req.body.password;
+    var status = req.body.status;
 
-    checkBeaconPW(password, function(queryErr, results) {
-        if(queryErr){
-            throw queryErr;
-        }
-        if(results.length > 0) {
-            updateBeacon(uuid, "N", function(updateErr, results) {
-                if(updateErr){
-                    throw updateErr;
-                }
-                result["message"] = ""
-                result["insertId"] = ""
+    if(status == "A"){
+        insertAndUpdateReceiveDB(deviceId, function(insertErr, results) {
+            if(insertErr){
+                throw insertErr;
+            }
+            result["message"] = "";
+            result["insertId"] = "";
+            res.send(result);
+        })
+    }else if(status == "C"){
+        checkBeaconPW(password, function(queryErr, results) {
+            if(queryErr){
+                throw queryErr;
+            }
+            if(results.length > 0) {
+                finishReceiveDB(deviceId, function(updateErr, results) {
+                    if(updateErr){
+                        throw updateErr;
+                    }
+                    result["message"] = "";
+                    result["insertId"] = "";
+                    res.send(result);
+                })
+            }else {
+                result["message"] = "非權限者，不可關閉Beacon";
                 res.send(result);
-            })
-        }else {
-            result["message"] = "非權限者，不可關閉Beacon"
-            res.send(result)
-        }
-    })
+            }
+        })
+    }  
 })
 
-//要關閉Beacon時，需要輸入密碼: 查詢Beacon密碼
-function checkBeaconPW(password, callback) {
-    var sql = "SELECT * FROM BEACON_PASSWORD WHERE PASSWORD = '" + password + "'"; 
-    pool.query(sql, function(err, rows, fileds){
-        if(err){
-            throw err; 
-        } 
- 
-        callback(err, rows)
-    })  
-}
-
 /*
-    前端傳入UUID，先檢查是否有其他ID狀態=Y
-    無: 檢查ID是否存於BEACON_LIST中
-        有: 回傳Result = True
-        無: 新增一筆至Table中，並回傳Result = True
-    無: 回傳已有發射狀態錯誤
+    前端傳入UUID
+    status = A:
+        先檢查是否有其他ID狀態=Y
+        無: 檢查ID是否存於BEACON_LIST中
+            有: 回傳Result = True
+            無: 新增一筆至Table中，並回傳Result = True
+        有: 回傳已有發射狀態錯誤
+    status = C:
+        關閉beacon使用，查詢輸入的密碼是否正確
 */
 app.post('/checkBeacon', urlencodedParser, function(req, res) {
     var uuid = req.body.uuid;
+    var password = req.body.password;
+    var status = req.body.status;
     clearResult();
 
     if(uuid){
-        
-        //先檢查是否有正開啟的beacon: STATUS = Y
-        checkStatus(uuid, function(checkStatusError, openList) {
-            if(checkStatusError){
-                throw checkStatusError;
-            }
+        if(status == "A"){
+            //先檢查是否有正開啟的beacon: STATUS = Y
+            checkStatus(uuid, function(checkStatusError, openList) {
+                if(checkStatusError){
+                    throw checkStatusError;
+                }
 
-            
-            if(openList.length > 0) {
-                result["message"] = "已有Beacon開啟，請再次確認";
-                res.send(result);
-            }else {
-                //檢查此UUID是否存於Table
-                getBeaconData(uuid, function(queryErr, rows){
-                    if(queryErr){
-                        throw queryErr;
-                    }
-                                    
-                    if(rows.length > 0){
-                        //若已存在則開啟Beacon
-                        updateBeacon(uuid, "Y", function(updateErr, results) {
-                            if(updateErr){
-                                throw updateErr;
-                            }
-                        
-                            res.send(result);
-                        })
-                    }else {
-                        //若不存在則新增Beacon並設定為開啟
-                        insertBeacon(uuid, function(insertErr, results){
-                            if(insertErr){
-                                throw insertErr;
-                            }
-    
-                            result["insertId"] = results.insertId
-                            res.send(result);
-                        })
-                    }          
-                })
-            }
-        })    
+                
+                if(openList.length > 0) {
+                    result["message"] = "已有Beacon開啟，請再次確認";
+                    res.send(result);
+                }else {
+                    //檢查此UUID是否存於Table
+                    getBeaconData(uuid, function(queryErr, rows){
+                        if(queryErr){
+                            throw queryErr;
+                        }
+                                        
+                        if(rows.length > 0){
+                            //若已存在則開啟Beacon
+                            updateBeacon(uuid, "Y", function(updateErr, results) {
+                                if(updateErr){
+                                    throw updateErr;
+                                }
+                            
+                                res.send(result);
+                            })
+                        }else {
+                            //若不存在則新增Beacon並設定為開啟
+                            insertBeacon(uuid, function(insertErr, results){
+                                if(insertErr){
+                                    throw insertErr;
+                                }
+        
+                                result["insertId"] = results.insertId;
+                                res.send(result);
+                            })
+                        }          
+                    })
+                }
+            })    
+        }else if(status == "C"){
+            checkBeaconPW(password, function(queryErr, results) {
+                if(queryErr){
+                    throw queryErr;
+                }
+                if(results.length > 0) {
+                    updateBeacon(uuid, "N", function(updateErr, results) {
+                        if(updateErr){
+                            throw updateErr;
+                        }
+                        result["message"] = "";
+                        result["insertId"] = "";
+                        res.send(result);
+                    })
+                }else {
+                    result["message"] = "非權限者，不可關閉Beacon";
+                    res.send(result);
+                }
+            })
+        }      
     }else{
         result["message"] = "請輸入UUID";
         res.send(result);
@@ -153,7 +172,7 @@ function checkStatus(uuid, callback) {
             throw err; 
         } 
  
-        callback(err, rows)
+        callback(err, rows);
     })  
 }
 
@@ -166,7 +185,31 @@ function getBeaconData(uuid, callback) {
             throw err; 
         } 
  
-        callback(err, rows)
+        callback(err, rows);
+    })  
+}
+
+//查詢BeaconList Table取得所有的資料
+function queryBeaconList(callback) {
+    var sql = "SELECT * FROM BEACON_LIST "; 
+
+    pool.query(sql, function(err, rows, fileds){
+        if(err){
+            throw err; 
+        } 
+        callback(err, rows);
+    })  
+}
+
+//要關閉Beacon時，需要輸入密碼: 查詢Beacon密碼
+function checkBeaconPW(password, callback) {
+    var sql = "SELECT * FROM BEACON_PASSWORD WHERE PASSWORD = '" + password + "'"; 
+    pool.query(sql, function(err, rows, fileds){
+        if(err){
+            throw err; 
+        } 
+ 
+        callback(err, rows);
     })  
 }
 
@@ -193,10 +236,36 @@ function updateBeacon(uuid, status, callback) {
     })  
 }
 
+//接收beacon訊號，並更新接收時間
+function insertAndUpdateReceiveDB(deviceId, callback) {
+    var systemTime = new Date().toISOString();
+    var sql = "INSERT INTO BEACON_RECEIVE_LOG (DEVICE_ID, START_TIME, UPDATE_TIME, FINISH_TIME) VALUES" +
+    "('" + deviceId + "', '" + systemTime + "', '', '')" +
+    " ON DUPLICATE KEY UPDATE UPDATE_TIME='" + systemTime + "'";
+    pool.query(sql, function(insertErr, rows, fileds){
+        if(insertErr){
+           throw insertErr; 
+        }
+        callback(insertErr, rows);
+    })  
+}
+
+//更新receiveDB
+function finishReceiveDB(deviceId, callback) {
+    var systemTime = new Date().toISOString();
+    var sql = "UPDATE BEACON_RECEIVE_LOG SET FINISH_TIME='" + systemTime + "' WHERE DEVICE_ID='" + deviceId + "'";
+    pool.query(sql, function(err, rows, fileds){
+    if(err) {
+        throw err; 
+    }
+    callback(err, rows);
+    })  
+}
+
 //清除結果資料
 function clearResult(){
-    result["message"] = ""
-    result["insertId"] = ""
+    result["message"] = "";
+    result["insertId"] = "";
 }
 
 // 監聽
