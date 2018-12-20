@@ -16,7 +16,8 @@ var pool = mysql.createPool({
 
 var result = {
     "message": "",
-    "insertId": ""
+    "insertId": "",
+    "beaconId": ""
 };
 
 /*
@@ -44,6 +45,7 @@ app.get('/getBeaconList', function(req, res) {
  */
 app.post('/receiveBeacon', urlencodedParser, function(req, res) {
     clearResult();
+    var uuid = req.body.uuid;
     var deviceId = req.body.deviceId;
     var password = req.body.password;
     var status = req.body.status;
@@ -60,14 +62,37 @@ app.post('/receiveBeacon', urlencodedParser, function(req, res) {
                     if(updateErr){
                         throw updateErr;
                     }
-                    res.send(result);
+                    getBeaconData(uuid, function(queryErr, rows){
+                        if(queryErr){
+                            throw queryErr;
+                        }
+                        
+                        if(rows.length > 0){
+                            var beaconId = rows[0].AID;
+                            result["beaconId"] = beaconId;
+                        }
+                        result["message"] = "OPEN";
+                        res.send(result);
+                    })
+                    
                 });
             }else{
-                insertReceiveDB(deviceId, function(insertErr, results){
+                insertReceiveDB(uuid, deviceId, function(insertErr, results){
                     if(insertErr){
                         throw insertErr;
                     }
-                    res.send(result);
+                    getBeaconData(uuid, function(queryErr, rows){
+                        if(queryErr){
+                            throw queryErr;
+                        }
+                        
+                        if(rows.length > 0){
+                            var beaconId = rows[0].AID;
+                            result["beaconId"] = beaconId;
+                        }
+                        result["message"] = "OPEN";
+                        res.send(result);
+                    })
                 });
             }
         })
@@ -81,6 +106,7 @@ app.post('/receiveBeacon', urlencodedParser, function(req, res) {
                     if(updateErr){
                         throw updateErr;
                     }
+                    result["message"] = "CLOSE";
                     res.send(result);
                 })
             }else {
@@ -135,7 +161,7 @@ app.post('/checkBeacon', urlencodedParser, function(req, res) {
                                 if(updateErr){
                                     throw updateErr;
                                 }
-                            
+                                result["message"] = "OPEN";
                                 res.send(result);
                             })
                         }else {
@@ -144,7 +170,7 @@ app.post('/checkBeacon', urlencodedParser, function(req, res) {
                                 if(insertErr){
                                     throw insertErr;
                                 }
-        
+                                result["message"] = "OPEN";
                                 result["insertId"] = results.insertId;
                                 res.send(result);
                             })
@@ -162,6 +188,7 @@ app.post('/checkBeacon', urlencodedParser, function(req, res) {
                         if(updateErr){
                             throw updateErr;
                         }
+                        result["message"] = "CLOSE";
                         res.send(result);
                     })
                 }else {
@@ -251,6 +278,7 @@ function updateBeacon(uuid, status, callback) {
     })  
 }
 
+//以裝置代號查詢receiveDB，查詢是否此裝置正開啟
 function queryReceiveDB(deviceId, callback) {
     var sql = "SELECT * FROM BEACON_RECEIVE_LOG WHERE DEVICE_ID = '" + deviceId + "' AND FINISH_TIME = ''"
     pool.query(sql, function(err, rows, fileds){
@@ -262,12 +290,12 @@ function queryReceiveDB(deviceId, callback) {
 }
 
 //接收beacon訊號，第一次開啟更新start_time，之後更新update_time
-function insertReceiveDB(deviceId, callback) {
+function insertReceiveDB(uuid, deviceId, callback) {
     //使用ISOString國際時間會與台灣相差8小時，須補加回來
     var systemTime = new Date();
     systemTime.setHours(systemTime.getHours() + 8);
-    var sql = "INSERT INTO BEACON_RECEIVE_LOG (DEVICE_ID, START_TIME, UPDATE_TIME, FINISH_TIME) VALUES" +
-    "('" + deviceId + "', '" + systemTime.toISOString() + "', '', '')";
+    var sql = "INSERT INTO BEACON_RECEIVE_LOG (UUID, DEVICE_ID, START_TIME, UPDATE_TIME, FINISH_TIME) VALUES" +
+    "('" + uuid + "', '" + deviceId + "', '" + systemTime.toISOString() + "', '', '')";
     pool.query(sql, function(insertErr, rows, fileds){
         if(insertErr){
            throw insertErr; 
@@ -307,6 +335,7 @@ function finishReceiveDB(deviceId, callback) {
 function clearResult(){
     result["message"] = "";
     result["insertId"] = "";
+    result["beaconId"] = "";
 }
 
 // 監聽
